@@ -4,8 +4,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Copy, Check, Home } from 'lucide-react';
+import { Copy, Check, Home, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Textarea } from '@/components/ui/textarea';
 import MusicPlayer from '@/components/MusicPlayer';
 import FloatingHearts from '@/components/FloatingHearts';
 import SpinningWheel from '@/components/SpinningWheel';
@@ -20,8 +21,7 @@ const GameRoom = () => {
   const [playerId, setPlayerId] = useState('');
   const [room, setRoom] = useState<any>(null);
   const [copied, setCopied] = useState(false);
-  const [currentQuestion, setCurrentQuestion] = useState<string | null>(null);
-  const [currentType, setCurrentType] = useState<'truth' | 'dare' | null>(null);
+  const [answer, setAnswer] = useState('');
 
   useEffect(() => {
     const id = `player_${Math.random().toString(36).substr(2, 9)}`;
@@ -107,28 +107,66 @@ const GameRoom = () => {
   };
 
   const handleSpinResult = async (result: 'truth' | 'dare') => {
-    if (!mode) return;
-    
-    const question = getRandomQuestion(mode, result);
-    setCurrentQuestion(question);
-    setCurrentType(result);
+    if (!mode || !isMyTurn() || room?.waiting_for_answer) return;
 
-    const history = room?.question_history || [];
-    const newHistoryItem = {
-      player: playerId === room?.player1_id ? 'Player 1' : 'Player 2',
-      type: result,
-      question,
-      timestamp: new Date().toLocaleTimeString(),
-    };
+    const question = getRandomQuestion(mode, result);
 
     await supabase
       .from('rooms')
       .update({
         current_question: question,
         current_question_type: result,
-        question_history: [...history, newHistoryItem],
+        waiting_for_answer: true,
+        is_spinning: false,
       })
       .eq('room_code', roomCode);
+  };
+
+  const submitAnswer = async () => {
+    if (!answer.trim() || !room?.current_question) return;
+
+    const history = room?.question_history || [];
+    const playerName = playerId === room?.player1_id ? 'Player 1' : 'Player 2';
+
+    const newHistoryItem = {
+      player: playerName,
+      playerId: playerId,
+      type: room.current_question_type,
+      question: room.current_question,
+      answer: answer.trim(),
+      timestamp: new Date().toLocaleTimeString(),
+    };
+
+    const newIsPlayer1Turn = !room.is_player1_turn;
+
+    await supabase
+      .from('rooms')
+      .update({
+        question_history: [...history, newHistoryItem],
+        waiting_for_answer: false,
+        is_player1_turn: newIsPlayer1Turn,
+        current_question: null,
+        current_question_type: null,
+      })
+      .eq('room_code', roomCode);
+
+    setAnswer('');
+
+    toast({
+      title: 'Answer submitted!',
+      description: 'Turn passed to the other player.',
+    });
+  };
+
+  const isMyTurn = () => {
+    if (!room) return false;
+    const isPlayer1 = playerId === room.player1_id;
+    return (isPlayer1 && room.is_player1_turn) || (!isPlayer1 && !room.is_player1_turn);
+  };
+
+  const canSpin = () => {
+    if (!room?.player1_id || !room?.player2_id) return false;
+    return isMyTurn() && !room.waiting_for_answer && !room.is_spinning;
   };
 
   const copyRoomLink = () => {
@@ -158,7 +196,7 @@ const GameRoom = () => {
     return (
       <div className="min-h-screen p-8 flex flex-col items-center justify-center relative overflow-hidden">
         <MusicPlayer />
-        
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -230,7 +268,7 @@ const GameRoom = () => {
     <div className="min-h-screen p-4 md:p-8 relative overflow-hidden">
       <MusicPlayer />
       {mode && <FloatingHearts mode={mode} />}
-      
+
       <Button
         variant="outline"
         onClick={() => navigate('/')}
@@ -254,30 +292,81 @@ const GameRoom = () => {
             {room?.player1_id && room?.player2_id ? '2 Players Connected' : 'Waiting for player...'}
           </span>
         </div>
+        {room?.player1_id && room?.player2_id && (
+          <div className="mt-4">
+            {isMyTurn() ? (
+              <p className="text-lg font-semibold text-green-400">Your Turn!</p>
+            ) : (
+              <p className="text-lg font-semibold text-yellow-400">Waiting for other player...</p>
+            )}
+          </div>
+        )}
       </motion.div>
 
       <div className="max-w-4xl mx-auto space-y-8">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.2 }}
-          className="flex justify-center"
-        >
-          <SpinningWheel onResult={handleSpinResult} mode={mode} />
-        </motion.div>
+        {!room?.waiting_for_answer && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.2 }}
+            className="flex flex-col items-center gap-4"
+          >
+            {canSpin() ? (
+              <>
+                <SpinningWheel onResult={handleSpinResult} mode={mode} />
+                <p className="text-sm text-muted-foreground">Spin the wheel to get your question!</p>
+              </>
+            ) : (
+              <Card className="p-8 bg-card/50 backdrop-blur-sm border-border text-center">
+                <p className="text-muted-foreground">
+                  {!room?.player1_id || !room?.player2_id
+                    ? 'Waiting for both players to join...'
+                    : 'The wheel is locked. Wait for your turn.'}
+                </p>
+              </Card>
+            )}
+          </motion.div>
+        )}
 
-        {currentQuestion && (
+        {room?.current_question && room?.waiting_for_answer && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-center"
+            className="space-y-6"
           >
             <Card className={`p-8 bg-gradient-to-br ${getModeGradient()} border-none text-white max-w-2xl mx-auto`}>
               <div className="text-sm uppercase tracking-wider mb-4 opacity-80">
-                {currentType}
+                {room.current_question_type}
               </div>
-              <p className="text-2xl font-semibold">{currentQuestion}</p>
+              <p className="text-2xl font-semibold">{room.current_question}</p>
             </Card>
+
+            {isMyTurn() ? (
+              <Card className="p-6 max-w-2xl mx-auto bg-card/50 backdrop-blur-sm border-border">
+                <h3 className="text-lg font-semibold mb-4 text-foreground">Your Answer</h3>
+                <div className="space-y-4">
+                  <Textarea
+                    value={answer}
+                    onChange={(e) => setAnswer(e.target.value)}
+                    placeholder="Type your answer here..."
+                    className="min-h-[120px] resize-none bg-input border-border text-foreground"
+                  />
+                  <Button
+                    onClick={submitAnswer}
+                    disabled={!answer.trim()}
+                    variant="glow"
+                    className="w-full gap-2"
+                  >
+                    <Send className="w-4 h-4" />
+                    Submit Answer
+                  </Button>
+                </div>
+              </Card>
+            ) : (
+              <Card className="p-6 max-w-2xl mx-auto bg-card/50 backdrop-blur-sm border-border text-center">
+                <p className="text-muted-foreground">Waiting for the other player to answer...</p>
+              </Card>
+            )}
           </motion.div>
         )}
 
