@@ -172,26 +172,26 @@ const GameRoom = () => {
         return;
       }
 
-      // Try to join as player 1
-      if (!existingRoom.player1_id) {
-        const { data, error } = await supabase.rpc('join_room_as_player_1', {
+      // Try to join as player 1 if slot is empty and we're not already player 2
+      if (!existingRoom.player1_id && existingRoom.player2_id !== id) {
+        const { data: joinData, error: joinError } = await supabase.rpc('join_room_as_player_1', {
           p_room_code: roomCode,
           p_player_id: id
         });
 
-        if (!error && data) {
+        if (!joinError && joinData) {
           return;
         }
       }
 
-      // Try to join as player 2
+      // Try to join as player 2 if slot is empty and we're not already player 1
       if (!existingRoom.player2_id && existingRoom.player1_id !== id) {
-        const { data, error } = await supabase.rpc('join_room_as_player_2', {
+        const { data: joinData, error: joinError } = await supabase.rpc('join_room_as_player_2', {
           p_room_code: roomCode,
           p_player_id: id
         });
 
-        if (!error && data) {
+        if (!joinError && joinData) {
           return;
         }
       }

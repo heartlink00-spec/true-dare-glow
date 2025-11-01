@@ -5,10 +5,18 @@ language plpgsql
 security definer
 as $$
 begin
+  -- Lock the row to prevent concurrent updates
+  perform *
+  from rooms
+  where room_code = p_room_code
+  for update;
+  
+  -- Only update if player is not already in the room
   update rooms
   set player1_id = p_player_id
   where room_code = p_room_code
-    and player1_id is null;
+    and player1_id is null
+    and player2_id != p_player_id;
     
   return found;
 end;
@@ -21,6 +29,13 @@ language plpgsql
 security definer
 as $$
 begin
+  -- Lock the row to prevent concurrent updates
+  perform *
+  from rooms
+  where room_code = p_room_code
+  for update;
+  
+  -- Only update if player is not already in the room
   update rooms
   set player2_id = p_player_id
   where room_code = p_room_code
