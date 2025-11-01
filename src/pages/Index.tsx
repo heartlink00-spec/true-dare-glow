@@ -76,10 +76,15 @@ const Index = () => {
     }
 
     try {
+      // Generate a player ID for joining
+      const playerId = `player_${Math.random().toString(36).substr(2, 9)}`;
+      const upperRoomCode = roomCode.toUpperCase();
+      
+      // Check if room exists
       const { data, error } = await supabase
         .from('rooms')
         .select('*')
-        .eq('room_code', roomCode.toUpperCase())
+        .eq('room_code', upperRoomCode)
         .single();
 
       if (error || !data) {
@@ -91,17 +96,11 @@ const Index = () => {
         return;
       }
 
-      // Check if room is full before redirecting
-      if (data.player1_id && data.player2_id) {
-        toast({
-          title: 'Room is full',
-          description: 'This room already has two players.',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      navigate(`/room/${roomCode.toUpperCase()}`);
+      // Store player ID before redirecting
+      localStorage.setItem(`player_id_${upperRoomCode}`, playerId);
+      
+      // Let the GameRoom component handle joining logic
+      navigate(`/room/${upperRoomCode}`);
     } catch (error) {
       console.error('Error joining room:', error);
     }

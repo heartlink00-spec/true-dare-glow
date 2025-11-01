@@ -150,7 +150,10 @@ const GameRoom = () => {
   }, [roomCode]);
 
   const joinRoom = async (id: string) => {
+    if (!id || !roomCode) return;
+    
     try {
+      // Get current room state
       const { data: existingRoom, error: fetchError } = await supabase
         .from('rooms')
         .select('*')
@@ -172,31 +175,41 @@ const GameRoom = () => {
         return;
       }
 
-      // Try to join as player 1 if slot is empty and we're not already player 2
-      if (!existingRoom.player1_id && existingRoom.player2_id !== id) {
-        const { data: joinData, error: joinError } = await supabase.rpc('join_room_as_player_1', {
-          p_room_code: roomCode,
-          p_player_id: id
+      // If both slots are taken, show error
+      if (existingRoom.player1_id && existingRoom.player2_id) {
+        toast({
+          title: 'Room is full',
+          description: 'This room already has two players.',
+          variant: 'destructive',
         });
-
-        if (!joinError && joinData) {
-          return;
-        }
+        navigate('/');
+        return;
       }
 
-      // Try to join as player 2 if slot is empty and we're not already player 1
-      if (!existingRoom.player2_id && existingRoom.player1_id !== id) {
-        const { data: joinData, error: joinError } = await supabase.rpc('join_room_as_player_2', {
-          p_room_code: roomCode,
-          p_player_id: id
-        });
+      // Try to join empty slot
+      const { data: updateResult, error: updateError } = await supabase
+        .from('rooms')
+        .update({
+          player1_id: !existingRoom.player1_id ? id : existingRoom.player1_id,
+          player2_id: existingRoom.player1_id && !existingRoom.player2_id ? id : existingRoom.player2_id
+        })
+        .eq('room_code', roomCode)
+        .select()
+        .single();
 
-        if (!joinError && joinData) {
-          return;
-        }
+      if (updateError || !updateResult) {
+        toast({
+          title: 'Error joining room',
+          description: 'Please try again.',
+          variant: 'destructive',
+        });
+        return;
       }
 
-      // If we get here, the room is full or there was an error joining
+      // Successfully joined
+      return;
+
+      // If we get here, something went wrong
       toast({
         title: 'Room is full',
         description: 'This room already has two players.',
