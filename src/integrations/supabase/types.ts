@@ -16,43 +16,52 @@ export type Database = {
     Tables: {
       rooms: {
         Row: {
-          created_at: string | null
+          created_at: string
           current_question: string | null
           current_question_type: string | null
-          current_turn: string | null
           id: string
+          is_player1_turn: boolean
+          is_spinning: boolean
+          last_activity: string
           mode: string | null
           player1_id: string | null
           player2_id: string | null
-          question_history: Json | null
+          question_history: Json
           room_code: string
-          updated_at: string | null
+          updated_at: string
+          waiting_for_answer: boolean
         }
         Insert: {
-          created_at?: string | null
+          created_at?: string
           current_question?: string | null
           current_question_type?: string | null
-          current_turn?: string | null
           id?: string
+          is_player1_turn?: boolean
+          is_spinning?: boolean
+          last_activity?: string
           mode?: string | null
           player1_id?: string | null
           player2_id?: string | null
-          question_history?: Json | null
+          question_history?: Json
           room_code: string
-          updated_at?: string | null
+          updated_at?: string
+          waiting_for_answer?: boolean
         }
         Update: {
-          created_at?: string | null
+          created_at?: string
           current_question?: string | null
           current_question_type?: string | null
-          current_turn?: string | null
           id?: string
+          is_player1_turn?: boolean
+          is_spinning?: boolean
+          last_activity?: string
           mode?: string | null
           player1_id?: string | null
           player2_id?: string | null
-          question_history?: Json | null
+          question_history?: Json
           room_code?: string
-          updated_at?: string | null
+          updated_at?: string
+          waiting_for_answer?: boolean
         }
         Relationships: []
       }

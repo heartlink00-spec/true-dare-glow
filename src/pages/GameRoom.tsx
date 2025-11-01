@@ -104,24 +104,36 @@ const GameRoom = () => {
 
       await channel.subscribe(trackPresence);
 
-      // Handle window/tab close
-      const handleBeforeUnload = () => {
-        const isPlayer1 = id === initialRoom?.player1_id;
+      // Handle window/tab close - cleanup player slot
+      const handleBeforeUnload = async () => {
+        const currentRoom = await supabase
+          .from('rooms')
+          .select('*')
+          .eq('room_code', roomCode)
+          .single();
+
+        if (!currentRoom.data) return;
+
+        const isPlayer1 = id === currentRoom.data.player1_id;
+        const isPlayer2 = id === currentRoom.data.player2_id;
+
         const updateData = isPlayer1
           ? { player1_id: null }
-          : id === initialRoom?.player2_id
+          : isPlayer2
           ? { player2_id: null }
           : null;
-        
+
         if (updateData) {
-          // Synchronous localStorage cleanup
           localStorage.removeItem(`player_id_${roomCode}`);
-          
-          // Fire-and-forget database cleanup
-          navigator.sendBeacon(
-            `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rooms?room_code=eq.${roomCode}`,
-            JSON.stringify(updateData)
-          );
+
+          try {
+            await supabase
+              .from('rooms')
+              .update(updateData)
+              .eq('room_code', roomCode);
+          } catch (error) {
+            console.error('Error cleaning up player on exit:', error);
+          }
         }
       };
 
@@ -214,12 +226,27 @@ const GameRoom = () => {
     }
   };
 
+  const handleSpinStart = async () => {
+    if (!mode || !isMyTurn() || room?.waiting_for_answer || room?.is_spinning) return false;
+
+    const { error } = await supabase
+      .from('rooms')
+      .update({ is_spinning: true })
+      .eq('room_code', roomCode);
+
+    if (error) {
+      console.error('Error starting spin:', error);
+      return false;
+    }
+    return true;
+  };
+
   const handleSpinResult = async (result: 'truth' | 'dare') => {
-    if (!mode || !isMyTurn() || room?.waiting_for_answer) return;
+    if (!mode) return;
 
     const question = getRandomQuestion(mode, result);
 
-    await supabase
+    const { error } = await supabase
       .from('rooms')
       .update({
         current_question: question,
@@ -228,12 +255,25 @@ const GameRoom = () => {
         is_spinning: false,
       })
       .eq('room_code', roomCode);
+
+    if (error) {
+      console.error('Error setting question:', error);
+      await supabase
+        .from('rooms')
+        .update({ is_spinning: false })
+        .eq('room_code', roomCode);
+      toast({
+        title: 'Error',
+        description: 'Failed to get question. Try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const submitAnswer = async () => {
-    if (!answer.trim() || !room?.current_question) return;
+    if (!answer.trim() || !room?.current_question || !isMyTurn()) return;
 
-    const history = room?.question_history || [];
+    const history = Array.isArray(room?.question_history) ? room.question_history : [];
     const playerName = playerId === room?.player1_id ? 'Player 1' : 'Player 2';
 
     const newHistoryItem = {
@@ -247,7 +287,7 @@ const GameRoom = () => {
 
     const newIsPlayer1Turn = !room.is_player1_turn;
 
-    await supabase
+    const { error } = await supabase
       .from('rooms')
       .update({
         question_history: [...history, newHistoryItem],
@@ -257,6 +297,16 @@ const GameRoom = () => {
         current_question_type: null,
       })
       .eq('room_code', roomCode);
+
+    if (error) {
+      console.error('Error submitting answer:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to submit answer. Try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     setAnswer('');
 
@@ -273,7 +323,7 @@ const GameRoom = () => {
   };
 
   const canSpin = () => {
-    if (!room?.player1_id || !room?.player2_id) return false;
+    if (!room?.player1_id || !room?.player2_id || !mode) return false;
     return isMyTurn() && !room.waiting_for_answer && !room.is_spinning;
   };
 
@@ -421,7 +471,7 @@ const GameRoom = () => {
           >
             {canSpin() ? (
               <>
-                <SpinningWheel onResult={handleSpinResult} mode={mode} />
+                <SpinningWheel onResult={handleSpinResult} onSpinStart={handleSpinStart} mode={mode} disabled={room?.is_spinning} />
                 <p className="text-sm text-muted-foreground">Spin the wheel to get your question!</p>
               </>
             ) : (
@@ -478,7 +528,7 @@ const GameRoom = () => {
           </motion.div>
         )}
 
-        <GameHistory history={room?.question_history || []} />
+        <GameHistory history={Array.isArray(room?.question_history) ? room.question_history : []} />
       </div>
     </div>
   );

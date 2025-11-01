@@ -4,24 +4,29 @@ import { Button } from './ui/button';
 
 interface SpinningWheelProps {
   onResult: (result: 'truth' | 'dare') => void;
+  onSpinStart: () => Promise<boolean>;
   mode: 'friendly' | 'crush' | 'adult';
+  disabled?: boolean;
 }
 
-const SpinningWheel = ({ onResult, mode }: SpinningWheelProps) => {
+const SpinningWheel = ({ onResult, onSpinStart, mode, disabled = false }: SpinningWheelProps) => {
   const [isSpinning, setIsSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
 
-  const spin = () => {
-    if (isSpinning) return;
-    
+  const spin = async () => {
+    if (isSpinning || disabled) return;
+
+    const canStart = await onSpinStart();
+    if (!canStart) return;
+
     setIsSpinning(true);
     const result = Math.random() > 0.5 ? 'truth' : 'dare';
     const baseRotation = result === 'truth' ? 0 : 180;
     const spins = 5;
     const newRotation = rotation + (360 * spins) + baseRotation + Math.random() * 30 - 15;
-    
+
     setRotation(newRotation);
-    
+
     setTimeout(() => {
       setIsSpinning(false);
       onResult(result);
@@ -66,7 +71,7 @@ const SpinningWheel = ({ onResult, mode }: SpinningWheelProps) => {
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
             <Button
               onClick={spin}
-              disabled={isSpinning}
+              disabled={isSpinning || disabled}
               variant="glow"
               size="lg"
               className="rounded-full w-24 h-24 text-sm font-bold shadow-[0_0_30px_hsl(var(--bright-purple)/0.6)]"
