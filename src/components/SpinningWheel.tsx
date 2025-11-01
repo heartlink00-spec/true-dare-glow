@@ -41,21 +41,31 @@ const SpinningWheel = ({ onResult, mode }: SpinningWheelProps) => {
 
   return (
     <div className="flex flex-col items-center gap-8">
-      <motion.div
-        className={`w-64 h-64 rounded-full bg-gradient-to-br ${getGradient()} relative shadow-[0_0_60px_hsl(var(--bright-purple)/0.4)] flex items-center justify-center`}
-        animate={{ rotate: rotation }}
-        transition={{ duration: 3, ease: [0.34, 1.56, 0.64, 1] }}
-      >
-        <div className="absolute inset-0 flex flex-col">
-          <div className="flex-1 flex items-center justify-center border-b-2 border-white/20">
-            <span className="text-3xl font-bold text-white">TRUTH</span>
-          </div>
-          <div className="flex-1 flex items-center justify-center">
-            <span className="text-3xl font-bold text-white">DARE</span>
-          </div>
+      <div className="relative">
+        {/* Pointer Arrow - Right Side */}
+        <div className="absolute -right-8 top-1/2 -translate-y-1/2 z-10">
+          <div className="w-0 h-0 border-t-[25px] border-t-transparent border-l-[40px] border-l-yellow-400 border-b-[25px] border-b-transparent drop-shadow-[0_0_10px_rgba(250,204,21,0.8)]" />
         </div>
-        <div className="absolute -right-4 top-1/2 -translate-y-1/2 w-0 h-0 border-t-[20px] border-t-transparent border-l-[30px] border-l-white border-b-[20px] border-b-transparent" />
-      </motion.div>
+
+        <motion.div
+          className="w-64 h-64 rounded-full relative shadow-[0_0_60px_hsl(var(--bright-purple)/0.4)] overflow-hidden"
+          animate={{ rotate: rotation }}
+          transition={{ duration: 3, ease: [0.34, 1.56, 0.64, 1] }}
+        >
+          {/* Top Half - TRUTH (Blue) */}
+          <div className="absolute inset-0 top-0 bottom-1/2 bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center border-b-4 border-white">
+            <span className="text-4xl font-bold text-white drop-shadow-lg">TRUTH</span>
+          </div>
+          
+          {/* Bottom Half - DARE (Pink) */}
+          <div className="absolute inset-0 top-1/2 bottom-0 bg-gradient-to-br from-pink-500 to-pink-600 flex items-center justify-center">
+            <span className="text-4xl font-bold text-white drop-shadow-lg">DARE</span>
+          </div>
+          
+          {/* Center Circle */}
+          <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-gradient-to-br ${getGradient()} border-4 border-white shadow-lg`} />
+        </motion.div>
+      </div>
       
       <Button
         onClick={spin}
