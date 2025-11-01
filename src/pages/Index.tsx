@@ -18,12 +18,31 @@ const Index = () => {
   const createRoom = async () => {
     setIsCreating(true);
     try {
+      // Generate a unique room code
       const code = Math.random().toString(36).substring(2, 8).toUpperCase();
       
+      // Generate a player ID for the room creator
+      const playerId = `player_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Check if a room with this code already exists
+      const { data: existingRoom } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('room_code', code)
+        .single();
+
+      if (existingRoom) {
+        throw new Error('Room code already exists, please try again');
+      }
+
+      // Store player ID in localStorage
+      localStorage.setItem(`player_id_${code}`, playerId);
+
       const { error } = await supabase
         .from('rooms')
         .insert({
           room_code: code,
+          player1_id: playerId, // Set the creator as player1
         });
 
       if (error) throw error;
@@ -67,6 +86,16 @@ const Index = () => {
         toast({
           title: 'Room not found',
           description: 'Please check the room code and try again.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Check if room is full before redirecting
+      if (data.player1_id && data.player2_id) {
+        toast({
+          title: 'Room is full',
+          description: 'This room already has two players.',
           variant: 'destructive',
         });
         return;
