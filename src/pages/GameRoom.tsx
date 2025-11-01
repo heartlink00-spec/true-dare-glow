@@ -24,14 +24,16 @@ const GameRoom = () => {
   const [answer, setAnswer] = useState('');
 
   useEffect(() => {
-    const id = `player_${Math.random().toString(36).substr(2, 9)}`;
+    // Generate a persistent player ID and store it in localStorage
+    let id = localStorage.getItem(`player_id_${roomCode}`);
+    if (!id) {
+      id = `player_${Math.random().toString(36).substr(2, 9)}`;
+      localStorage.setItem(`player_id_${roomCode}`, id);
+    }
     setPlayerId(id);
     joinRoom(id);
-  }, [roomCode]);
 
-  useEffect(() => {
-    if (!roomCode) return;
-
+    // Setup real-time subscription
     const channel = supabase
       .channel(`room:${roomCode}`)
       .on(
@@ -52,10 +54,30 @@ const GameRoom = () => {
       )
       .subscribe();
 
+    // Cleanup function
     return () => {
       supabase.removeChannel(channel);
+      // Remove player from room when leaving
+      if (room) {
+        const isPlayer1 = id === room.player1_id;
+        const updateData = isPlayer1
+          ? { player1_id: null }
+          : id === room.player2_id
+          ? { player2_id: null }
+          : null;
+        
+        if (updateData) {
+          supabase
+            .from('rooms')
+            .update(updateData)
+            .eq('room_code', roomCode)
+            .then(() => {
+              localStorage.removeItem(`player_id_${roomCode}`);
+            });
+        }
+      }
     };
-  }, [roomCode, mode]);
+  }, [roomCode]);
 
   const joinRoom = async (id: string) => {
     try {
@@ -75,19 +97,68 @@ const GameRoom = () => {
         return;
       }
 
+      // Set initial room state
       setRoom(existingRoom);
       setMode(existingRoom.mode as GameMode);
 
-      if (!existingRoom.player1_id) {
-        await supabase
-          .from('rooms')
-          .update({ player1_id: id })
-          .eq('room_code', roomCode);
-      } else if (!existingRoom.player2_id && existingRoom.player1_id !== id) {
-        await supabase
-          .from('rooms')
-          .update({ player2_id: id })
-          .eq('room_code', roomCode);
+      // Check if player is already in the room
+      if (id === existingRoom.player1_id || id === existingRoom.player2_id) {
+        return; // Player is already in the room
+      }
+
+      // Join room logic with retries
+      const maxRetries = 3;
+      let retryCount = 0;
+      let joined = false;
+
+      while (!joined && retryCount < maxRetries) {
+        try {
+          if (!existingRoom.player1_id) {
+            const { error } = await supabase
+              .from('rooms')
+              .update({ player1_id: id })
+              .eq('room_code', roomCode)
+              .eq('player1_id', null); // Ensure no race condition
+
+            if (!error) {
+              joined = true;
+            }
+          } else if (!existingRoom.player2_id && existingRoom.player1_id !== id) {
+            const { error } = await supabase
+              .from('rooms')
+              .update({ player2_id: id })
+              .eq('room_code', roomCode)
+              .eq('player2_id', null); // Ensure no race condition
+
+            if (!error) {
+              joined = true;
+            }
+          } else {
+            // Room is full
+            toast({
+              title: 'Room is full',
+              description: 'This room already has two players.',
+              variant: 'destructive',
+            });
+            navigate('/');
+            return;
+          }
+        } catch (error) {
+          console.error('Error joining room:', error);
+        }
+        retryCount++;
+        if (!joined && retryCount < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+        }
+      }
+
+      if (!joined) {
+        toast({
+          title: 'Unable to join room',
+          description: 'Please try again later.',
+          variant: 'destructive',
+        });
+        navigate('/');
       }
     } catch (error) {
       console.error('Error joining room:', error);
